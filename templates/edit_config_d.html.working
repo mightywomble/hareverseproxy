@@ -3,7 +3,10 @@
 {% block title %}{% if new_file %}Add New Config{% else %}Edit {{ filename }}{% endif %}{% endblock %}
 
 {% block content %}
-<h1 class="mb-4">{% if new_file %}Add New HAProxy Config File{% else %}Edit {{ filename }}{% endif %}</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <a href="/config_d" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to Config.d List</a>
+    <h1 class="h3 mb-0">{% if new_file %}Add New HAProxy Config File{% else %}Edit {{ filename }}{% endif %}</h1>
+</div>
 
 <form id="configForm">
     {% if new_file %}
