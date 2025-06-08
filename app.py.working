@@ -57,21 +57,6 @@ def get_config_files():
         logging.error(f"Error listing config files: {e}")
     return files
 
-def get_config_file_content(filename):
-    """Reads the content of a specific config file."""
-    file_path = os.path.join(CONFIG_D_DIR, filename)
-    if not os.path.exists(file_path):
-        return False, "File not found."
-    try:
-        with open(file_path, 'r') as f:
-            content = f.read()
-        return True, content
-    except Exception as e:
-        logging.error(f"Error reading file {filename}: {e}")
-        return False, f"Error reading file: {str(e)}"
-
-
-
 # --- Routes ---
 
 @app.route('/')
@@ -180,14 +165,6 @@ def haproxy_cfg():
             return render_template('haproxy_cfg.html', content=content)
         except Exception as e:
             return f"Error reading haproxy.cfg: {str(e)}", 500
-
-@app.route('/api/config_d/content/<filename>')
-def api_config_d_content(filename):
-    success, content = get_config_file_content(filename)
-    if success:
-        return jsonify(success=True, content=content)
-    else:
-        return jsonify(success=False, message=content), 404 # Use 404 if file not found
 
 # --- Error Handling ---
 @app.errorhandler(404)

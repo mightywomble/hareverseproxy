@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Config.d Files{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">HAProxy Config.d Files</h1>
+
+<a href="/config_d/add" class="btn btn-primary mb-3">Add New Config File</a>
+
+{% if config_files %}
+<div class="list-group">
+    {% for file in config_files %}
+    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+        <span>{{ file }}</span>
+        <div>
+            <a href="/config_d/edit/{{ file }}" class="btn btn-sm btn-info me-2">Edit</a>
+            <button class="btn btn-sm btn-danger" onclick="deleteConfigFile('{{ file }}')">Delete</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p>No configuration files found in `/etc/haproxy/conf.d`.</p>
+{% endif %}
+
+<div id="delete-message" class="mt-3"></div>
+
+<script>
+    function deleteConfigFile(filename) {
+        if (!confirm(`Are you sure you want to delete ${filename}? This action cannot be undone.`)) {
+            return;
+        }
+
+        const messageDiv = document.getElementById('delete-message');
+        messageDiv.innerHTML = `<div class="alert alert-info">Deleting ${filename}...</div>`;
+
+        fetch(`/api/config_d/delete/${filename}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                // Remove the deleted item from the DOM
+                setTimeout(() => {
+                    location.reload(); // Simple reload for now, could be more dynamic
+                }, 1000);
+            } else {
+                messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting file:', error);
+            messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+        });
+    }
+</script>
+{% endblock %}
