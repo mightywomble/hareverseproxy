@@ -4,6 +4,7 @@
 
 **For users with no programming experience, it is STRONGLY RECOMMENDED to use existing, secure, and robust system administration tools like Webmin or a dedicated HAProxy management solution. This document is for informational purposes only, detailing the complexities and security considerations if one were to build a custom solution from scratch.**
 
+** DONT USE THIS IN A PRODUCTION ENVIRONMENT IT IS A PROOF OF CONCEPT BUT I THOUGHT THE CODE MIGHT BE WORTH SHARING. THIS IS NOT SECURE **
 ---
 
 ## Project Overview
