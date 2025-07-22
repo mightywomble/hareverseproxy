@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Config.d Files{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">HAProxy Config.d Files</h1>
+
+<a href="/config_d/add" class="btn btn-primary mb-3">Add New Config File</a>
+
+{% if config_files %}
+<div class="accordion" id="configFilesAccordion">
+    {% for file in config_files %}
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="heading{{ loop.index }}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}" onclick="fetchFileContent('{{ file }}', 'collapse{{ loop.index }}')">
+                {{ file }}
+            </button>
+        </h2>
+        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#configFilesAccordion">
+            <div class="accordion-body">
+                <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; word-break: break-all; font-family: monospace;">Loading content...</pre>
+                <div class="mt-3">
+                    <a href="/config_d/edit/{{ file }}" class="btn btn-sm btn-info me-2">Edit</a>
+                    <button class="btn btn-sm btn-danger" onclick="deleteConfigFile('{{ file }}')">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p>No configuration files found in `/etc/haproxy/conf.d`.</p>
+{% endif %}
+
+<div id="delete-message" class="mt-3"></div>
+
+<script>
+    // Function to fetch and display file content when accordion item is clicked
+    function fetchFileContent(filename, collapseId) {
+        const collapseElement = document.getElementById(collapseId);
+        const preElement = collapseElement.querySelector('pre');
+
+        // Only fetch if content isn't loaded or if it's currently "Loading..."
+        if (preElement.textContent === "Loading content..." || preElement.dataset.loaded !== 'true') {
+            fetch(`/api/config_d/content/${filename}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        preElement.textContent = data.content;
+                        preElement.dataset.loaded = 'true'; // Mark as loaded
+                    } else {
+                        preElement.textContent = `Error loading content: ${data.message}`;
+                        preElement.classList.add('text-danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching file content:', error);
+                    preElement.textContent = `Network Error: Could not load content for ${filename}.`;
+                    preElement.classList.add('text-danger');
+                });
+        }
+    }
+
+    function deleteConfigFile(filename) {
+        if (!confirm(`Are you sure you want to delete ${filename}? This action cannot be undone.`)) {
+            return;
+        }
+
+        const messageDiv = document.getElementById('delete-message');
+        messageDiv.innerHTML = `<div class="alert alert-info">Deleting ${filename}...</div>`;
+
+        fetch(`/api/config_d/delete/${filename}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                // Remove the deleted item from the DOM (more specific than reload)
+                const accordionItem = event.target.closest('.accordion-item');
+                if (accordionItem) {
+                    accordionItem.remove();
+                }
+                setTimeout(() => {
+                     messageDiv.innerHTML = ''; // Clear message after a short delay
+                }, 2000);
+            } else {
+                messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting file:', error);
+            messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+        });
+    }
+</script>
+{% endblock %}

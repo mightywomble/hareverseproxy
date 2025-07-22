@@ -1,0 +1,59 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    margin-bottom: 20px;
+}
+
+.container {
+    max-width: 960px; /* Adjust as needed for larger screens */
+}
+
+/* Enhancements for forms */
+textarea {
+    resize: vertical; /* Allow vertical resizing for textareas */
+}
+
+/* Card hover effects */
+.card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Badge colors for status */
+.badge.bg-success {
+    background-color: #28a745 !important;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important; /* For better contrast on yellow */
+}
+
+.badge.bg-info {
+    background-color: #17a2b8 !important;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+/* Responsive button groups */
+@media (max-width: 767.98px) {
+    .d-md-block {
+        display: block !important;
+    }
+    .d-grid.gap-2 button {
+        width: 100%;
+        margin-bottom: 10px !important;
+    }
+}

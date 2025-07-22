@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">HAProxy Service Control</h1>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">Service Status: <span id="haproxy-status" class="badge bg-secondary">Loading...</span></h5>
+        <div class="d-grid gap-2 d-md-block">
+            <button class="btn btn-primary me-2 mb-2" onclick="performHAProxyAction('test')">Test Config</button>
+            <button class="btn btn-success me-2 mb-2" onclick="performHAProxyAction('start')">Start</button>
+            <button class="btn btn-warning me-2 mb-2" onclick="performHAProxyAction('restart')">Restart</button>
+            <button class="btn btn-danger mb-2" onclick="performHAProxyAction('stop')">Stop</button>
+        </div>
+        <div id="action-message" class="mt-3"></div>
+    </div>
+</div>
+
+<h2 class="mb-4">Quick Links</h2>
+<div class="row">
+    <div class="col-md-6 mb-3">
+        <div class="card text-center shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Manage config.d files</h5>
+                <p class="card-text">View, add, edit, or remove individual HAProxy configuration snippets.</p>
+                <a href="/config_d" class="btn btn-info">Go to Config.d</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card text-center shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Edit haproxy.cfg</h5>
+                <p class="card-text">Directly view and edit the main HAProxy configuration file.</p>
+                <a href="/haproxy_cfg" class="btn btn-info">Edit haproxy.cfg</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        updateHAProxyStatus();
+        setInterval(updateHAProxyStatus, 5000); // Update status every 5 seconds
+    });
+
+    function updateHAProxyStatus() {
+        fetch('/api/haproxy_status')
+            .then(response => response.json())
+            .then(data => {
+                const statusElement = document.getElementById('haproxy-status');
+                statusElement.textContent = data.status.toUpperCase();
+                statusElement.className = 'badge'; // Reset classes
+
+                if (data.status === 'running') {
+                    statusElement.classList.add('bg-success');
+                } else if (data.status === 'stopped') {
+                    statusElement.classList.add('bg-danger');
+                } else {
+                    statusElement.classList.add('bg-secondary');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching HAProxy status:', error);
+                const statusElement = document.getElementById('haproxy-status');
+                statusElement.textContent = 'ERROR';
+                statusElement.className = 'badge bg-danger';
+            });
+    }
+
+    function performHAProxyAction(action) {
+        const messageDiv = document.getElementById('action-message');
+        messageDiv.innerHTML = `<div class="alert alert-info">Executing ${action} command...</div>`;
+
+        fetch('/api/haproxy_action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: action })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                updateHAProxyStatus(); // Update status after action
+            } else {
+                messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error performing HAProxy action:', error);
+            messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+        });
+    }
+</script>
+{% endblock %}

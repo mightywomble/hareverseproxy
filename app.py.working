@@ -1,0 +1,200 @@
+# haproxy_web_app/app.py
+
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+import os
+import subprocess
+import logging
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24) # Used for session management and CSRF protection (though we're not using sessions heavily here)
+
+# Configuration paths
+CONFIG_D_DIR = "/etc/haproxy/conf.d"
+HAPROXY_CFG_PATH = "/etc/haproxy/haproxy.cfg"
+
+# --- Utility Functions ---
+
+def run_command(command, check_output=True):
+    """Executes a shell command and returns its output or status."""
+    try:
+        if check_output:
+            result = subprocess.run(command, capture_output=True, text=True, check=True, shell=True)
+            return True, result.stdout.strip()
+        else:
+            subprocess.run(command, check=True, shell=True)
+            return True, "Command executed successfully."
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Command failed: {command}\nStdout: {e.stdout}\nStderr: {e.stderr}")
+        return False, f"Command failed: {e.stderr.strip() or e.stdout.strip() or 'Unknown error'}"
+    except FileNotFoundError:
+        logging.error(f"Command not found: {command.split(' ')[0]}")
+        return False, f"Error: Command '{command.split(' ')[0]}' not found. Is it in your PATH?"
+    except Exception as e:
+        logging.error(f"An unexpected error occurred: {e}")
+        return False, f"An unexpected error occurred: {str(e)}"
+
+def get_haproxy_status():
+    """Checks the HAProxy service status."""
+    success, output = run_command("sudo systemctl status haproxy", check_output=True)
+    if success:
+        if "active (running)" in output:
+            return "running"
+        elif "inactive (dead)" in output:
+            return "stopped"
+        else:
+            return "unknown"
+    return "error"
+
+def get_config_files():
+    """Lists .cfg files in config.d directory."""
+    files = []
+    try:
+        for filename in os.listdir(CONFIG_D_DIR):
+            if filename.endswith(".cfg") and os.path.isfile(os.path.join(CONFIG_D_DIR, filename)):
+                files.append(filename)
+        files.sort()
+    except Exception as e:
+        logging.error(f"Error listing config files: {e}")
+    return files
+
+def get_config_file_content(filename):
+    """Reads the content of a specific config file."""
+    file_path = os.path.join(CONFIG_D_DIR, filename)
+    if not os.path.exists(file_path):
+        return False, "File not found."
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+        return True, content
+    except Exception as e:
+        logging.error(f"Error reading file {filename}: {e}")
+        return False, f"Error reading file: {str(e)}"
+
+
+
+# --- Routes ---
+
+@app.route('/')
+def index():
+    status = get_haproxy_status()
+    return render_template('index.html', haproxy_status=status)
+
+@app.route('/api/haproxy_status')
+def api_haproxy_status():
+    status = get_haproxy_status()
+    return jsonify(status=status)
+
+@app.route('/api/haproxy_action', methods=['POST'])
+def api_haproxy_action():
+    action = request.json.get('action')
+    command_map = {
+        'start': 'sudo systemctl start haproxy',
+        'stop': 'sudo systemctl stop haproxy',
+        'restart': 'sudo systemctl restart haproxy',
+        'test': f'sudo haproxy -c -f {HAPROXY_CFG_PATH}'
+    }
+
+    command = command_map.get(action)
+    if not command:
+        return jsonify(success=False, message="Invalid action"), 400
+
+    success, message = run_command(command, check_output=True)
+    return jsonify(success=success, message=message)
+
+@app.route('/config_d')
+def config_d_list():
+    files = get_config_files()
+    return render_template('config_d.html', config_files=files)
+
+@app.route('/config_d/add', methods=['GET', 'POST'])
+def add_config_d():
+    if request.method == 'POST':
+        filename = request.form.get('filename')
+        content = request.form.get('content')
+        if not filename or not content:
+            return jsonify(success=False, message="Filename and content are required."), 400
+
+        file_path = os.path.join(CONFIG_D_DIR, filename)
+        if os.path.exists(file_path):
+            return jsonify(success=False, message=f"File '{filename}' already exists."), 409
+
+        try:
+            with open(file_path, 'w') as f:
+                f.write(content)
+            return jsonify(success=True, message=f"File '{filename}' created successfully.")
+        except Exception as e:
+            return jsonify(success=False, message=f"Error creating file: {str(e)}"), 500
+    return render_template('edit_config_d.html', filename="", content="", new_file=True)
+
+@app.route('/config_d/edit/<filename>', methods=['GET', 'POST'])
+def edit_config_d(filename):
+    file_path = os.path.join(CONFIG_D_DIR, filename)
+    if not os.path.exists(file_path):
+        return "File not found", 404
+
+    if request.method == 'POST':
+        content = request.form.get('content')
+        if content is None:
+            return jsonify(success=False, message="Content is required."), 400
+        try:
+            with open(file_path, 'w') as f:
+                f.write(content)
+            return jsonify(success=True, message=f"File '{filename}' updated successfully.")
+        except Exception as e:
+            return jsonify(success=False, message=f"Error updating file: {str(e)}"), 500
+    else:
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+            return render_template('edit_config_d.html', filename=filename, content=content, new_file=False)
+        except Exception as e:
+            return f"Error reading file: {str(e)}", 500
+
+@app.route('/api/config_d/delete/<filename>', methods=['DELETE'])
+def delete_config_d(filename):
+    file_path = os.path.join(CONFIG_D_DIR, filename)
+    if not os.path.exists(file_path):
+        return jsonify(success=False, message="File not found."), 404
+    try:
+        os.remove(file_path)
+        return jsonify(success=True, message=f"File '{filename}' deleted successfully.")
+    except Exception as e:
+        return jsonify(success=False, message=f"Error deleting file: {str(e)}"), 500
+
+@app.route('/haproxy_cfg', methods=['GET', 'POST'])
+def haproxy_cfg():
+    if request.method == 'POST':
+        content = request.form.get('content')
+        if content is None:
+            return jsonify(success=False, message="Content is required."), 400
+        try:
+            with open(HAPROXY_CFG_PATH, 'w') as f:
+                f.write(content)
+            return jsonify(success=True, message="haproxy.cfg updated successfully.")
+        except Exception as e:
+            return jsonify(success=False, message=f"Error updating haproxy.cfg: {str(e)}"), 500
+    else:
+        try:
+            with open(HAPROXY_CFG_PATH, 'r') as f:
+                content = f.read()
+            return render_template('haproxy_cfg.html', content=content)
+        except Exception as e:
+            return f"Error reading haproxy.cfg: {str(e)}", 500
+
+@app.route('/api/config_d/content/<filename>')
+def api_config_d_content(filename):
+    success, content = get_config_file_content(filename)
+    if success:
+        return jsonify(success=True, content=content)
+    else:
+        return jsonify(success=False, message=content), 404 # Use 404 if file not found
+
+# --- Error Handling ---
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+# You might want to create a 404.html template later.
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)

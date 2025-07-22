@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}{% if new_file %}Add New Config{% else %}Edit {{ filename }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <a href="/config_d" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to Config.d List</a>
+    <h1 class="h3 mb-0">{% if new_file %}Add New HAProxy Config File{% else %}Edit {{ filename }}{% endif %}</h1>
+</div>
+
+<form id="configForm">
+    {% if new_file %}
+    <div class="mb-3">
+        <label for="filename" class="form-label">Filename (e.g., my_backend.cfg)</label>
+        <input type="text" class="form-control" id="filename" name="filename" required>
+    </div>
+    {% else %}
+    <div class="mb-3">
+        <label for="filename" class="form-label">Filename</label>
+        <input type="text" class="form-control" id="filename" name="filename" value="{{ filename }}" readonly>
+    </div>
+    {% endif %}
+
+    <div class="mb-3">
+        <label for="content" class="form-label">Configuration Content</label>
+        <textarea class="form-control" id="content" name="content" rows="20" style="font-family: monospace;" required>{{ content }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn-success">{% if new_file %}Create File{% else %}Save Changes{% endif %}</button>
+    <a href="/config_d" class="btn btn-secondary">Cancel</a>
+</form>
+
+<div id="form-message" class="mt-3"></div>
+
+<script>
+    document.getElementById('configForm').addEventListener('submit', function(event) {
+        event.preventDefault(); // Prevent default form submission
+
+        const form = event.target;
+        const formData = new FormData(form);
+        const filename = formData.get('filename');
+        const content = formData.get('content');
+        const messageDiv = document.getElementById('form-message');
+
+        let url = {% if new_file %}'/config_d/add'{% else %}`/config_d/edit/${filename}`{% endif %};
+        let method = 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded' // For form data
+            },
+            body: new URLSearchParams(formData).toString()
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                if ({% if new_file %}true{% else %}false{% endif %}) { // If it's a new file, redirect after success
+                    setTimeout(() => {
+                        window.location.href = '/config_d';
+                    }, 1500);
+                }
+            } else {
+                messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error submitting form:', error);
+            messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+        });
+    });
+</script>
+{% endblock %}

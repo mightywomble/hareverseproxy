@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{% if new_file %}Add New Config{% else %}Edit {{ filename }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <a href="/config_d" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to Config.d List</a>
+    <h1 class="h3 mb-0">{% if new_file %}Add New HAProxy Config File{% else %}Edit {{ filename }}{% endif %}</h1>
+</div>
+
+{% if new_file %}
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">Choose Configuration Method:</h5>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+            <button type="button" class="btn btn-info" id="wizardBtn">Use Wizard</button>
+            <button type="button" class="btn btn-outline-info" id="manualBtn">Manual Input</button>
+        </div>
+    </div>
+</div>
+
+<div id="wizardFormContainer" style="display: none;">
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header">
+            HAProxy Backend Wizard
+        </div>
+        <div class="card-body">
+            <form id="backendWizardForm">
+                <div class="mb-3">
+                    <label for="serviceName" class="form-label">Service Name (e.g., myapp)</label>
+                    <input type="text" class="form-control" id="serviceName" name="service_name" required>
+                    <div class="form-text">Used for backend name (myapp_backend), server name (myapp_server) and ACL (host_myapp).</div>
+                </div>
+                <div class="mb-3">
+                    <label for="serviceIp" class="form-label">Service IP Address (e.g., 192.168.1.100)</label>
+                    <input type="text" class="form-control" id="serviceIp" name="service_ip" required>
+                </div>
+                <div class="mb-3">
+                    <label for="servicePort" class="form-label">Service Port (e.g., 8080)</label>
+                    <input type="number" class="form-control" id="servicePort" name="service_port" required>
+                </div>
+                <div class="mb-3">
+                    <label for="serviceUrl" class="form-label">Preferred URL (e.g., myapp.example.com)</label>
+                    <input type="text" class="form-control" id="serviceUrl" name="service_url" required>
+                    <div class="form-text">The hostname HAProxy will match for this service.</div>
+                </div>
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="isHttps" name="is_https">
+                    <label class="form-check-label" for="isHttps">Remote Service is HTTPS? (adds `ssl verify none`)</label>
+                </div>
+                <button type="submit" class="btn btn-success">Generate & Add Config</button>
+            </form>
+            <div id="wizard-message" class="mt-3"></div>
+
+            <div id="frontendConfigDisplay" style="display: none;">
+                <h5 class="mt-4">Updated 00-frontend.cfg:</h5>
+                <pre class="bg-light p-3 rounded" id="frontendConfigContent" style="white-space: pre-wrap; word-break: break-all; font-family: monospace;"></pre>
+                <div class="d-grid gap-2 d-md-block mt-3">
+                    <button class="btn btn-primary me-2 mb-2" onclick="performHAProxyAction('test')">Test HAProxy Config</button>
+                    <button class="btn btn-warning mb-2" onclick="performHAProxyAction('restart')">Restart HAProxy</button>
+                </div>
+                <div id="haproxy-action-message" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="manualFormContainer" style="display: none;">
+    <form id="manualConfigForm">
+        <div class="mb-3">
+            <label for="manualFilename" class="form-label">Filename (e.g., my_backend.cfg)</label>
+            <input type="text" class="form-control" id="manualFilename" name="filename" required>
+        </div>
+        <div class="mb-3">
+            <label for="manualContent" class="form-label">Configuration Content</label>
+            <textarea class="form-control" id="manualContent" name="content" rows="20" style="font-family: monospace;" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Create File</button>
+    </form>
+    <div id="manual-message" class="mt-3"></div>
+</div>
+
+{% else %}
+<form id="configForm">
+    <div class="mb-3">
+        <label for="filename" class="form-label">Filename</label>
+        <input type="text" class="form-control" id="filename" name="filename" value="{{ filename }}" readonly>
+    </div>
+    <div class="mb-3">
+        <label for="content" class="form-label">Configuration Content</label>
+        <textarea class="form-control" id="content" name="content" rows="20" style="font-family: monospace;" required>{{ content }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-success">Save Changes</button>
+    <a href="/config_d" class="btn btn-secondary">Cancel</a>
+</form>
+<div id="form-message" class="mt-3"></div>
+{% endif %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const wizardBtn = document.getElementById('wizardBtn');
+        const manualBtn = document.getElementById('manualBtn');
+        const wizardFormContainer = document.getElementById('wizardFormContainer');
+        const manualFormContainer = document.getElementById('manualFormContainer');
+
+        if (wizardBtn) { // Only if on 'add new file' page
+            // Default to wizard view
+            wizardBtn.classList.add('active');
+            wizardFormContainer.style.display = 'block';
+
+            wizardBtn.addEventListener('click', () => {
+                wizardFormContainer.style.display = 'block';
+                manualFormContainer.style.display = 'none';
+                wizardBtn.classList.add('active');
+                manualBtn.classList.remove('active');
+            });
+
+            manualBtn.addEventListener('click', () => {
+                manualFormContainer.style.display = 'block';
+                wizardFormContainer.style.display = 'none';
+                manualBtn.classList.add('active');
+                wizardBtn.classList.remove('active');
+            });
+        }
+
+        // Handle Wizard Form Submission
+        const backendWizardForm = document.getElementById('backendWizardForm');
+        if (backendWizardForm) {
+            backendWizardForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                const formData = new FormData(backendWizardForm);
+                const data = {
+                    service_name: formData.get('service_name'),
+                    service_ip: formData.get('service_ip'),
+                    service_port: formData.get('service_port'),
+                    service_url: formData.get('service_url'),
+                    is_https: formData.get('is_https') === 'on' // Checkbox value
+                };
+                
+                const messageDiv = document.getElementById('wizard-message');
+                messageDiv.innerHTML = `<div class="alert alert-info">Generating config...</div>`;
+                document.getElementById('frontendConfigDisplay').style.display = 'none';
+
+
+                fetch('/api/config_d/wizard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${result.message}</div>`;
+                        // Display the frontend config and action buttons
+                        document.getElementById('frontendConfigContent').textContent = result.frontend_cfg_content;
+                        document.getElementById('frontendConfigDisplay').style.display = 'block';
+
+                    } else {
+                        messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${result.message}</div>`;
+                        document.getElementById('frontendConfigDisplay').style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error submitting wizard form:', error);
+                    messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+                    document.getElementById('frontendConfigDisplay').style.display = 'none';
+                });
+            });
+        }
+
+        // Handle Manual Form Submission (existing logic, adjusted for new ID)
+        const manualConfigForm = document.getElementById('manualConfigForm');
+        if (manualConfigForm) {
+            manualConfigForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                const form = event.target;
+                const formData = new FormData(form);
+                const filename = formData.get('filename');
+                const content = formData.get('content');
+                const messageDiv = document.getElementById('manual-message');
+
+                fetch('/config_d/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams(formData).toString()
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                        setTimeout(() => {
+                            window.location.href = '/config_d';
+                        }, 1500);
+                    } else {
+                        messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error submitting manual form:', error);
+                    messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+                });
+            });
+        }
+
+        // Existing logic for editing an existing file (if applicable)
+        const configForm = document.getElementById('configForm'); // This is the ID for the *edit* form
+        if (configForm && !{% if new_file %}true{% else %}false{% endif %}) { // Ensure it's the edit form, not the add form
+             configForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                const form = event.target;
+                const formData = new FormData(form);
+                const filename = formData.get('filename');
+                const content = formData.get('content');
+                const messageDiv = document.getElementById('form-message');
+
+                fetch(`/config_d/edit/${filename}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams(formData).toString()
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                    } else {
+                        messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error submitting edit form:', error);
+                    messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+                });
+            });
+        }
+    });
+
+    // Function to perform HAProxy actions, specifically for the wizard result
+    function performHAProxyAction(action) {
+        const messageDiv = document.getElementById('haproxy-action-message');
+        messageDiv.innerHTML = `<div class="alert alert-info">Executing ${action} command...</div>`;
+
+        fetch('/api/haproxy_action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: action })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                messageDiv.innerHTML = `<div class="alert alert-success"><strong>Success!</strong> ${data.message}</div>`;
+                // No need to update HAProxy status badge on this page, but could if desired
+            } else {
+                messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Error!</strong> ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error performing HAProxy action:', error);
+            messageDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> Could not connect to the server.</div>`;
+        });
+    }
+</script>
+{% endblock %}
