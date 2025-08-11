@@ -1,0 +1,49 @@
+# HAProxy Config Manager - Python Dependencies
+# Core web framework
+Flask==2.3.3
+
+# Production WSGI server
+gunicorn==21.2.0
+
+# HTTP client for API calls (if needed)
+requests==2.31.0
+
+# Configuration file parsing (if needed for advanced parsing)
+configparser==6.0.0
+
+# Network utilities
+ipaddress==1.0.23
+
+# System process management
+psutil==5.9.5
+
+# Date and time utilities
+python-dateutil==2.8.2
+
+# JSON handling improvements
+simplejson==3.19.1
+
+# Logging enhancements
+colorlog==6.7.0
+
+# Development and testing dependencies (optional)
+# Uncomment if needed for development
+# pytest==7.4.2
+# pytest-flask==1.2.0
+# black==23.9.1
+# flake8==6.1.0
+
+# Security enhancements
+Werkzeug==2.3.7
+
+# Template engine (included with Flask but explicit version)
+Jinja2==3.1.2
+
+# URL routing (included with Flask but explicit version)
+itsdangerous==2.1.2
+
+# Click for CLI support (included with Flask)
+click==8.1.7
+
+# MarkupSafe for template security (included with Jinja2)
+MarkupSafe==2.1.3

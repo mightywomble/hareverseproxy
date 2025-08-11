@@ -1,21 +1,714 @@
-# HAProxy Web Management Interface (Conceptual Outline & Security Considerations)
+# HAProxy Config Manager
 
-**WARNING: This document outlines the technical components required for a web-based HAProxy management interface. Implementing such a system, especially for direct file and service manipulation, requires advanced knowledge of web development, server-side security, and Linux system administration. Attempting this without significant expertise can lead to severe security vulnerabilities, system instability, and potential compromise of your server.**
+🚀 **Modern Glass Panel Web Interface for HAProxy Management**
 
-**For users with no programming experience, it is STRONGLY RECOMMENDED to use existing, secure, and robust system administration tools like Webmin or a dedicated HAProxy management solution. This document is for informational purposes only, detailing the complexities and security considerations if one were to build a custom solution from scratch.**
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-2.3.3-green.svg)](https://flask.palletsprojects.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Development-orange.svg)]()
 
-** DONT USE THIS IN A PRODUCTION ENVIRONMENT IT IS A PROOF OF CONCEPT BUT I THOUGHT THE CODE MIGHT BE WORTH SHARING. THIS IS NOT SECURE **
+> **⚠️ SECURITY WARNING:** This is a development/proof-of-concept application. Do not use in production environments without implementing proper security measures, authentication, and access controls.
+
 ---
 
-## Project Overview
+## 📋 Executive Summary
 
-The goal is to create a web application that allows you to:
-1.  View, add, edit, and remove HAProxy configuration files in `/etc/haproxy/config.d`.
-2.  View and edit the main HAProxy configuration file `/etc/haproxy/haproxy.cfg`.
-3.  Check the status of the `haproxy` service.
-4.  Perform `haproxy -c -f /etc/haproxy/haproxy.cfg` for configuration testing.
-5.  Start, stop, and restart the `haproxy` service.
-6.  Provide a responsive and aesthetically pleasing user interface accessible from desktop and mobile.
+HAProxy Config Manager is a modern, web-based management interface for HAProxy reverse proxy servers. Built with Flask and featuring a stunning glass panel UI design, this application provides intuitive visual tools for managing HAProxy configurations, monitoring service status, and visualizing network topology.
+
+**Key Benefits:**
+- 🎯 **Simplified Management**: Web-based interface eliminates need for command-line HAProxy management
+- 🗺️ **Network Visualization**: Interactive topology maps show real-time connection flows and server health
+- ⚡ **Real-time Monitoring**: Live service status updates and health checks
+- 🎨 **Modern UI**: Glass panel design with dark blue text for optimal readability
+- 📱 **Responsive Design**: Works seamlessly on desktop, tablet, and mobile devices
+- 🧙‍♂️ **Configuration Wizard**: Guided setup for new backend services
+
+**Target Users:**
+- System administrators managing HAProxy deployments
+- DevOps engineers configuring reverse proxy setups
+- Network administrators monitoring traffic flows
+- Anyone seeking a visual alternative to command-line HAProxy management
+
+---
+
+## ✨ Features Overview
+
+### 🏠 **Service Control Dashboard**
+- **Real-time Status Monitoring**: Live HAProxy service status with auto-refresh
+- **Service Management**: Start, stop, restart HAProxy with single clicks
+- **Configuration Testing**: Built-in `haproxy -c` config validation
+- **Quick Access**: Direct navigation to configuration and network mapping tools
+
+### 🗺️ **Interactive Network Topology Map** 
+*The crown jewel of this application*
+
+#### **Visual Network Discovery**
+- **Automatic Parsing**: Analyzes HAProxy configs to build network topology
+- **Smart Detection**: Identifies frontends, backends, ACL rules, and routing logic
+- **Real-time Health Checks**: Tests server connectivity and displays status
+
+#### **Interactive Visualization**
+- **D3.js Force-Directed Graph**: Dynamic, interactive network layout
+- **Node Types**: Color-coded representation of different components
+  - 🔵 External Clients (HTTP/HTTPS/TCP)
+  - 🟢 HAProxy Server (central hub)
+  - 🟠 Frontend Services (entry points)
+  - 🟣 Backend Services (target destinations)
+  - 🔴/🟡/🟢 Individual Servers (health status)
+
+#### **Connection Visualization**
+- **Protocol-based Coloring**:
+  - 🔵 HTTP (Port 80) - Blue connections
+  - 🟢 HTTPS (Port 443) - Green connections  
+  - 🟠 Custom Ports - Orange connections
+- **Connection Types**:
+  - Incoming traffic (client to frontend)
+  - Routing rules (frontend to backend)
+  - Server connections (backend to individual servers)
+
+#### **Interactive Features**
+- **Hover Highlighting**: Mouse over nodes to highlight related connections
+- **Node Details**: Click any component for detailed configuration information
+- **Drag & Drop**: Reposition nodes for optimal viewing
+- **Zoom & Pan**: Full navigation controls with reset functionality
+- **Filter Controls**: Toggle visibility by protocol, node type, or server status
+
+### 📁 **Configuration Management**
+
+#### **Config.d File Management**
+- **File Browser**: Visual listing of all configuration files
+- **Accordion View**: Expandable file contents with syntax highlighting
+- **CRUD Operations**: Create, read, update, delete configuration files
+- **Bulk Operations**: Manage multiple configuration files efficiently
+
+#### **Configuration Wizard**
+- **Guided Setup**: Step-by-step backend service configuration
+- **Auto-generation**: Creates both backend configs and frontend ACL rules
+- **SSL Detection**: Automatically handles HTTPS backend configurations
+- **Validation**: Built-in config syntax checking before deployment
+
+#### **Direct File Editing**
+- **Syntax Highlighting**: Enhanced readability for HAProxy configurations
+- **Real-time Validation**: Immediate feedback on configuration syntax
+- **Backup System**: Automatic versioning of configuration changes
+- **Atomic Updates**: Safe file replacement to prevent corruption
+
+### 🎨 **Modern Glass Panel UI**
+
+#### **Visual Design**
+- **Glass Morphism**: Semi-transparent panels with backdrop blur effects
+- **Gradient Backgrounds**: Beautiful purple-blue gradients with subtle animations
+- **Glass Navigation**: Uniform glass buttons with hover effects and consistent sizing
+- **Drop Shadows**: Multi-layered shadows for depth and dimension
+- **Glossy Effects**: Inset light streaks and glass-like borders
+
+#### **Accessibility**
+- **Dark Blue Text**: High contrast text (`#1a365d`) for optimal readability
+- **Glass Form Elements**: Semi-transparent inputs with clear boundaries
+- **Interactive Feedback**: Visual responses to user interactions
+- **Mobile Responsive**: Adaptive layout for all device sizes
+
+### 🔧 **Technical Features**
+
+#### **Backend Capabilities**
+- **Configuration Parser**: Advanced parsing of HAProxy configs and includes
+- **Network Analysis**: Real-time server connectivity testing
+- **Service Integration**: Direct systemctl integration for service management  
+- **API Architecture**: RESTful API design for frontend-backend communication
+- **Error Handling**: Comprehensive error management and logging
+
+#### **Security Features**
+- **Input Validation**: Comprehensive sanitization of all user inputs
+- **File Path Validation**: Restricted file access to authorized directories
+- **Command Injection Prevention**: Safe subprocess execution patterns
+- **Atomic File Operations**: Safe configuration file updates
+
+---
+
+## 🚀 Quick Start Guide
+
+### Prerequisites
+- Ubuntu/Debian Linux system
+- Python 3.8+
+- HAProxy installed and configured
+- sudo access for service management
+
+### Installation
+
+1. **Clone Repository**
+   ```bash
+   git clone <repository-url>
+   cd hareverseproxy
+   ```
+
+2. **Setup Python Environment**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip3 install -r requirements.txt
+   ```
+
+3. **Configure Permissions**
+   ```bash
+   # Add sudo permissions for HAProxy management
+   sudo visudo
+   # Add appropriate sudoers entries (see Security section)
+   ```
+
+4. **Run Application**
+   ```bash
+   python3 app.py
+   ```
+
+5. **Access Interface**
+   - Open browser to `http://localhost:5000`
+   - Navigate between Home, Map, Config.d Files, and haproxy.cfg
+
+---
+
+## 🛠️ Complete HAProxy Setup Guide
+
+### Phase 1: System Preparation
+
+#### 1.1 Install HAProxy
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install HAProxy and required tools
+sudo apt install haproxy certbot python3-certbot-dns-cloudflare -y
+
+# Create configuration directory structure
+sudo mkdir -p /etc/haproxy/conf.d
+sudo mkdir -p /etc/haproxy/certs
+sudo chmod 750 /etc/haproxy/certs
+```
+
+#### 1.2 Setup User and Permissions
+```bash
+# Create dedicated HAProxy management user
+sudo useradd -r -s /bin/bash -d /home/haproxy_webuser haproxy_webuser
+sudo mkdir -p /home/haproxy_webuser
+sudo chown haproxy_webuser:haproxy_webuser /home/haproxy_webuser
+
+# Add user to necessary groups
+sudo usermod -a -G ssl-cert haproxy_webuser
+```
+
+### Phase 2: SSL Certificate Setup with Cloudflare
+
+#### 2.1 Create Cloudflare API Token
+1. **Login to Cloudflare Dashboard**
+   - Go to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+   - Navigate to "My Profile" → "API Tokens"
+
+2. **Create Custom Token**
+   - Click "Create Token"
+   - Use "Custom token" template
+   - **Token name**: `HAProxy-DNS-Manager`
+   - **Permissions**:
+     - `Zone` : `Zone Settings` : `Read`
+     - `Zone` : `Zone` : `Read` 
+     - `Zone` : `DNS` : `Edit`
+   - **Zone Resources**:
+     - `Include` : `Specific zone` : `yourdomain.com`
+   - **Client IP Address Filtering**: (Optional) Restrict to server IP
+
+3. **Save Token Securely**
+   ```bash
+   # Create credentials file
+   sudo nano /etc/letsencrypt/cloudflare_credentials.ini
+   ```
+   
+   Add your token:
+   ```ini
+   # Cloudflare API token (recommended)
+   dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN_HERE
+   ```
+   
+   Secure the file:
+   ```bash
+   sudo chmod 600 /etc/letsencrypt/cloudflare_credentials.ini
+   sudo chown root:root /etc/letsencrypt/cloudflare_credentials.ini
+   ```
+
+#### 2.2 Obtain SSL Certificates
+```bash
+# Request certificate for your domain(s)
+sudo certbot certonly \
+  --dns-cloudflare \
+  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare_credentials.ini \
+  --email your-email@domain.com \
+  --agree-tos \
+  --no-eff-email \
+  -d yourdomain.com \
+  -d *.yourdomain.com
+
+# Create combined certificate for HAProxy
+sudo cat /etc/letsencrypt/live/yourdomain.com/fullchain.pem \
+         /etc/letsencrypt/live/yourdomain.com/privkey.pem \
+         > /etc/haproxy/certs/yourdomain.com.pem
+
+# Set appropriate permissions
+sudo chmod 600 /etc/haproxy/certs/yourdomain.com.pem
+sudo chown haproxy:haproxy /etc/haproxy/certs/yourdomain.com.pem
+```
+
+#### 2.3 Setup Certificate Auto-Renewal
+```bash
+# Create renewal hook script
+sudo nano /etc/letsencrypt/renewal-hooks/deploy/haproxy-deploy.sh
+```
+
+Add the following content:
+```bash
+#!/bin/bash
+# HAProxy certificate deployment hook
+
+# Combine certificates for HAProxy
+cat /etc/letsencrypt/live/yourdomain.com/fullchain.pem \
+    /etc/letsencrypt/live/yourdomain.com/privkey.pem \
+    > /etc/haproxy/certs/yourdomain.com.pem
+
+# Set permissions
+chmod 600 /etc/haproxy/certs/yourdomain.com.pem
+chown haproxy:haproxy /etc/haproxy/certs/yourdomain.com.pem
+
+# Reload HAProxy if running
+if systemctl is-active --quiet haproxy; then
+    systemctl reload haproxy
+fi
+```
+
+Make executable:
+```bash
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/haproxy-deploy.sh
+```
+
+### Phase 3: HAProxy Configuration - Separate Frontend/Backend Architecture
+
+#### 3.1 Main HAProxy Configuration
+Create `/etc/haproxy/haproxy.cfg`:
+
+```bash
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+```haproxy
+#---------------------------------------------------------------------
+# Global Settings
+#---------------------------------------------------------------------
+global
+    log         127.0.0.1:514 local0
+    chroot      /var/lib/haproxy
+    stats       socket /run/haproxy/admin.sock mode 660 level admin
+    stats       timeout 30s
+    user        haproxy
+    group       haproxy
+    daemon
+    
+    # SSL Configuration
+    ssl-default-bind-ciphers PROFILE=SYSTEM
+    ssl-default-server-ciphers PROFILE=SYSTEM
+    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    
+    # Performance Tuning
+    maxconn 4096
+    nbproc 1
+    nbthread 4
+
+#---------------------------------------------------------------------
+# Common Defaults
+#---------------------------------------------------------------------
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option                  http-server-close
+    option                  forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 3000
+    
+    # Error pages
+    errorfile 400 /etc/haproxy/errors/400.http
+    errorfile 403 /etc/haproxy/errors/403.http
+    errorfile 408 /etc/haproxy/errors/408.http
+    errorfile 500 /etc/haproxy/errors/500.http
+    errorfile 502 /etc/haproxy/errors/502.http
+    errorfile 503 /etc/haproxy/errors/503.http
+    errorfile 504 /etc/haproxy/errors/504.http
+
+#---------------------------------------------------------------------
+# Stats Interface
+#---------------------------------------------------------------------
+listen stats
+    bind *:8404
+    stats enable
+    stats uri /stats
+    stats refresh 30s
+    stats realm HAProxy\ Statistics
+    stats auth admin:SecurePassword123!  # CHANGE THIS PASSWORD
+    stats admin if TRUE
+
+#---------------------------------------------------------------------
+# Include Configuration Directory
+#---------------------------------------------------------------------
+# Load all .cfg files from conf.d directory
+# This enables the web interface to manage configurations
+```
+
+#### 3.2 Frontend Configuration (HTTP → HTTPS Redirect)
+Create `/etc/haproxy/conf.d/00-frontend.cfg`:
+
+```bash
+sudo nano /etc/haproxy/conf.d/00-frontend.cfg
+```
+
+```haproxy
+#---------------------------------------------------------------------
+# Frontend for HTTP (Port 80) - Redirect to HTTPS
+#---------------------------------------------------------------------
+frontend http_redirect_frontend
+    bind *:80
+    mode http
+    
+    # Security headers for HTTP
+    http-response add-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    http-response add-header X-Frame-Options "SAMEORIGIN"
+    http-response add-header X-Content-Type-Options "nosniff"
+    
+    # Redirect all HTTP traffic to HTTPS
+    redirect scheme https code 301 if !{ ssl_fc }
+
+#---------------------------------------------------------------------
+# Frontend for HTTPS (Port 443) - Main Entry Point
+#---------------------------------------------------------------------
+frontend https_frontend
+    bind *:443 ssl crt /etc/haproxy/certs/yourdomain.com.pem alpn h2,http/1.1
+    mode http
+    
+    # Security headers for HTTPS
+    http-response add-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    http-response add-header X-Frame-Options "SAMEORIGIN"
+    http-response add-header X-Content-Type-Options "nosniff"
+    http-response add-header X-XSS-Protection "1; mode=block"
+    http-response add-header Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Capture original host and protocol
+    http-request add-header X-Forwarded-Proto https
+    http-request add-header X-Forwarded-Host %[req.hdr(Host)]
+    
+    #-----------------------------------------------------------------
+    # ACL Definitions for Host-based Routing
+    #-----------------------------------------------------------------
+    # Add your ACL rules here
+    # Example: acl host_app1 hdr(host) -i app1.yourdomain.com
+    # Example: acl host_app2 hdr(host) -i app2.yourdomain.com
+    
+    # ACLs to match hostnames (managed by web interface)
+    
+    #-----------------------------------------------------------------
+    # Backend Routing Rules
+    #-----------------------------------------------------------------
+    # Add your use_backend rules here
+    # Example: use_backend app1_backend if host_app1
+    # Example: use_backend app2_backend if host_app2
+    
+    # Use backends based on hostname (managed by web interface)
+    
+    # Default backend for unmatched requests
+    default_backend default_backend
+```
+
+#### 3.3 Default Backend Configuration
+Create `/etc/haproxy/conf.d/99-default-backend.cfg`:
+
+```bash
+sudo nano /etc/haproxy/conf.d/99-default-backend.cfg
+```
+
+```haproxy
+#---------------------------------------------------------------------
+# Default Backend - Fallback for Unmatched Requests
+#---------------------------------------------------------------------
+backend default_backend
+    mode http
+    balance roundrobin
+    option forwardfor
+    
+    # Health check configuration
+    option httpchk GET /
+    http-check expect status 200
+    
+    # Default server (can be a maintenance page or main site)
+    server default_server 127.0.0.1:8080 check inter 30s fall 3 rise 2
+    
+    # Backup server configuration
+    # server backup_server 192.168.1.100:80 check backup
+    
+    # Error handling
+    errorfile 503 /etc/haproxy/errors/503.http
+```
+
+#### 3.4 Example Backend Service Configuration
+Create `/etc/haproxy/conf.d/10-webapp_backend.cfg`:
+
+```bash
+sudo nano /etc/haproxy/conf.d/10-webapp_backend.cfg
+```
+
+```haproxy
+#---------------------------------------------------------------------
+# Example Web Application Backend
+#---------------------------------------------------------------------
+backend webapp_backend
+    mode http
+    balance roundrobin
+    option forwardfor
+    option httpchk GET /health
+    http-check expect status 200
+    
+    # Connection settings
+    timeout connect 10s
+    timeout server 30s
+    retries 3
+    
+    # Backend servers
+    server webapp1 192.168.1.10:3000 check inter 10s fall 3 rise 2
+    server webapp2 192.168.1.11:3000 check inter 10s fall 3 rise 2 backup
+    
+    # For HTTPS backend servers, add 'ssl verify none'
+    # server webapp_https 192.168.1.12:8443 check ssl verify none
+```
+
+### Phase 4: Enable Configuration Directory Loading
+
+Since HAProxy doesn't natively support include directories, we need to create a system to combine configs:
+
+#### 4.1 Create Configuration Assembly Script
+```bash
+sudo nano /usr/local/bin/haproxy-reload.sh
+```
+
+```bash
+#!/bin/bash
+# HAProxy Configuration Assembly and Reload Script
+
+HAPROXY_CFG="/etc/haproxy/haproxy.cfg"
+CONF_D_DIR="/etc/haproxy/conf.d"
+TEMP_CFG="/tmp/haproxy.cfg.tmp"
+
+# Function to log messages
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a /var/log/haproxy-reload.log
+}
+
+# Create combined configuration
+create_combined_config() {
+    log_message "Creating combined HAProxy configuration..."
+    
+    # Start with main config
+    cp "$HAPROXY_CFG" "$TEMP_CFG"
+    
+    # Append all .cfg files from conf.d directory (sorted)
+    for config_file in "$CONF_D_DIR"/*.cfg; do
+        if [ -f "$config_file" ]; then
+            log_message "Including: $(basename "$config_file")"
+            echo "" >> "$TEMP_CFG"
+            echo "# Included from: $(basename "$config_file")" >> "$TEMP_CFG"
+            cat "$config_file" >> "$TEMP_CFG"
+        fi
+    done
+}
+
+# Test configuration
+test_config() {
+    log_message "Testing HAProxy configuration..."
+    if haproxy -c -f "$TEMP_CFG"; then
+        log_message "Configuration test passed"
+        return 0
+    else
+        log_message "Configuration test failed"
+        return 1
+    fi
+}
+
+# Main execution
+main() {
+    log_message "Starting HAProxy configuration reload process"
+    
+    # Create combined config
+    create_combined_config
+    
+    # Test the configuration
+    if test_config; then
+        # Move temp config to active location
+        mv "$TEMP_CFG" "/etc/haproxy/haproxy-combined.cfg"
+        
+        # Reload HAProxy with new configuration
+        if systemctl reload haproxy; then
+            log_message "HAProxy reloaded successfully"
+        else
+            log_message "HAProxy reload failed"
+            exit 1
+        fi
+    else
+        log_message "Configuration test failed, aborting reload"
+        rm -f "$TEMP_CFG"
+        exit 1
+    fi
+}
+
+# Run main function
+main "$@"
+```
+
+Make executable:
+```bash
+sudo chmod +x /usr/local/bin/haproxy-reload.sh
+```
+
+#### 4.2 Update HAProxy systemd Service
+```bash
+# Create systemd override directory
+sudo mkdir -p /etc/systemd/system/haproxy.service.d
+
+# Create override configuration
+sudo nano /etc/systemd/system/haproxy.service.d/override.conf
+```
+
+```ini
+[Service]
+# Use combined configuration file
+ExecStartPre=/usr/local/bin/haproxy-reload.sh
+ExecStart=
+ExecStart=/usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy-combined.cfg -p /run/haproxy.pid
+ExecReload=/usr/local/bin/haproxy-reload.sh
+```
+
+Reload systemd and restart HAProxy:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart haproxy
+sudo systemctl status haproxy
+```
+
+### Phase 5: Security Configuration
+
+#### 5.1 Configure sudoers for Web Application
+```bash
+sudo visudo -f /etc/sudoers.d/haproxy-webuser
+```
+
+```bash
+# HAProxy Web User Permissions
+# Allow specific systemctl commands
+haproxy_webuser ALL=(root) NOPASSWD: /bin/systemctl status haproxy
+haproxy_webuser ALL=(root) NOPASSWD: /bin/systemctl start haproxy
+haproxy_webuser ALL=(root) NOPASSWD: /bin/systemctl stop haproxy
+haproxy_webuser ALL=(root) NOPASSWD: /bin/systemctl restart haproxy
+haproxy_webuser ALL=(root) NOPASSWD: /bin/systemctl reload haproxy
+
+# Allow HAProxy configuration testing
+haproxy_webuser ALL=(root) NOPASSWD: /usr/sbin/haproxy -c -f *
+
+# Allow configuration reload script
+haproxy_webuser ALL=(root) NOPASSWD: /usr/local/bin/haproxy-reload.sh
+```
+
+#### 5.2 Set File Permissions
+```bash
+# Set ownership for configuration directories
+sudo chown -R haproxy_webuser:haproxy /etc/haproxy/conf.d/
+sudo chmod -R 644 /etc/haproxy/conf.d/
+sudo chmod 755 /etc/haproxy/conf.d/
+
+# Ensure main config is protected
+sudo chown root:haproxy /etc/haproxy/haproxy.cfg
+sudo chmod 640 /etc/haproxy/haproxy.cfg
+
+# Create log directory
+sudo mkdir -p /var/log/haproxy
+sudo chown haproxy:adm /var/log/haproxy
+```
+
+### Phase 6: Testing and Verification
+
+#### 6.1 Test Configuration
+```bash
+# Test HAProxy configuration
+sudo /usr/local/bin/haproxy-reload.sh
+
+# Check HAProxy status
+sudo systemctl status haproxy
+
+# Test SSL certificate
+echo | openssl s_client -connect yourdomain.com:443 -servername yourdomain.com 2>/dev/null | openssl x509 -noout -dates
+
+# Test HTTP redirect
+curl -I http://yourdomain.com
+
+# Test HTTPS
+curl -I https://yourdomain.com
+```
+
+#### 6.2 Verify Stats Interface
+- Navigate to `http://your-server-ip:8404/stats`
+- Login with credentials from haproxy.cfg
+- Verify all frontends and backends are visible
+
+### Phase 7: Adding New Backend Services
+
+With this setup, adding new services is simple:
+
+1. **Create Backend Configuration**:
+   ```bash
+   sudo nano /etc/haproxy/conf.d/20-newservice_backend.cfg
+   ```
+   
+2. **Add Backend Definition**:
+   ```haproxy
+   backend newservice_backend
+       mode http
+       balance roundrobin
+       option forwardfor
+       server newservice1 192.168.1.20:8080 check
+   ```
+
+3. **Update Frontend Rules**:
+   Edit `/etc/haproxy/conf.d/00-frontend.cfg` and add:
+   ```haproxy
+   # In ACL section
+   acl host_newservice hdr(host) -i newservice.yourdomain.com
+   
+   # In routing section
+   use_backend newservice_backend if host_newservice
+   ```
+
+4. **Reload Configuration**:
+   ```bash
+   sudo /usr/local/bin/haproxy-reload.sh
+   ```
+
+This architecture provides:
+- ✅ **Separation of Concerns**: Frontend/backend configurations are separated
+- ✅ **Easy Management**: Web interface can manage conf.d files
+- ✅ **SSL Termination**: Automatic HTTPS with Cloudflare certificates
+- ✅ **Auto-renewal**: Certificates update automatically
+- ✅ **High Availability**: Built-in health checks and failover
+- ✅ **Security**: Proper permissions and SSL configuration
+- ✅ **Monitoring**: Stats interface for real-time monitoring
+
+---
 
 ## Architectural Components
 
