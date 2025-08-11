@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+
+{% block title %}Network Map{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">🗺️ HAProxy Network Topology Map</h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary btn-sm" onclick="refreshMap()">🔄 Refresh</button>
+        <button class="btn btn-info btn-sm" onclick="toggleFilters()">🎛️ Filters</button>
+        <button class="btn btn-secondary btn-sm" onclick="resetZoom()">🔍 Reset View</button>
+    </div>
+</div>
+
+<!-- Filters Panel -->
+<div id="filtersPanel" class="card mb-4" style="display: none;">
+    <div class="card-header">
+        <h5 class="mb-0">Filter Network View</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <h6>Protocol</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterHTTP" checked>
+                    <label class="form-check-label" for="filterHTTP">HTTP</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterHTTPS" checked>
+                    <label class="form-check-label" for="filterHTTPS">HTTPS</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterTCP" checked>
+                    <label class="form-check-label" for="filterTCP">TCP</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <h6>Node Types</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterClients" checked>
+                    <label class="form-check-label" for="filterClients">External Clients</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterFrontends" checked>
+                    <label class="form-check-label" for="filterFrontends">Frontends</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterBackends" checked>
+                    <label class="form-check-label" for="filterBackends">Backends</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <h6>Server Status</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterHealthy" checked>
+                    <label class="form-check-label" for="filterHealthy">🟢 Healthy</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterUnreachable" checked>
+                    <label class="form-check-label" for="filterUnreachable">🔴 Unreachable</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filterUnknown" checked>
+                    <label class="form-check-label" for="filterUnknown">🟡 Unknown</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-success btn-sm" onclick="applyFilters()">Apply Filters</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearFilters()">Clear All</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Legend -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h6>Legend</h6>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-node client-node me-2"></div>
+                    <span>External Clients</span>
+                </div>
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-node haproxy-node me-2"></div>
+                    <span>HAProxy Server</span>
+                </div>
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-node frontend-node me-2"></div>
+                    <span>Frontend Services</span>
+                </div>
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-node backend-node me-2"></div>
+                    <span>Backend Services</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-line http-line me-2"></div>
+                    <span>HTTP (Port 80)</span>
+                </div>
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-line https-line me-2"></div>
+                    <span>HTTPS (Port 443)</span>
+                </div>
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-line tcp-line me-2"></div>
+                    <span>Custom Port</span>
+                </div>
+                <div class="d-flex align-items-center mb-2">
+                    <div class="legend-line routing-line me-2"></div>
+                    <span>Routing Rule</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Network Map Container -->
+<div class="card">
+    <div class="card-body p-0">
+        <div id="networkMap" class="network-map-container">
+            <div class="loading-overlay">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading network topology...</span>
+                </div>
+                <p class="mt-3">Analyzing HAProxy configuration...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Node Details Modal -->
+<div class="modal fade" id="nodeModal" tabindex="-1" aria-labelledby="nodeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="nodeModalLabel">Node Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="nodeModalBody">
+                <!-- Node details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include D3.js -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script>
+let networkData = null;
+let svg, g, simulation;
+let nodes, links;
+
+// Initialize the network map
+document.addEventListener('DOMContentLoaded', function() {
+    initializeNetworkMap();
+    loadNetworkData();
+});
+
+function initializeNetworkMap() {
+    const container = document.getElementById('networkMap');
+    const width = container.clientWidth;
+    const height = 600;
+
+    svg = d3.select('#networkMap')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .call(d3.zoom().on('zoom', handleZoom))
+        .on('dblclick.zoom', null);
+
+    g = svg.append('g');
+
+    // Add arrow markers for connections
+    svg.append('defs').selectAll('marker')
+        .data(['incoming', 'routing', 'default_routing', 'backend_server'])
+        .enter().append('marker')
+        .attr('id', d => `arrow-${d}`)
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 20)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('class', d => `arrow ${d}`);
+
+    // Initialize simulation
+    simulation = d3.forceSimulation()
+        .force('link', d3.forceLink().id(d => d.id).distance(150))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(30));
+}
+
+function loadNetworkData() {
+    fetch('/api/network_topology')
+        .then(response => response.json())
+        .then(data => {
+            networkData = data;
+            renderNetworkMap();
+            document.querySelector('.loading-overlay').style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error loading network data:', error);
+            document.querySelector('.loading-overlay').innerHTML = 
+                '<div class="alert alert-danger">Error loading network topology. Please check the HAProxy configuration.</div>';
+        });
+}
+
+function renderNetworkMap() {
+    if (!networkData) return;
+
+    // Prepare nodes and links for D3
+    const allNodes = [];
+    const allLinks = [];
+
+    // Add HAProxy server
+    allNodes.push({
+        ...networkData.haproxy_server,
+        group: 'haproxy'
+    });
+
+    // Add external clients
+    networkData.external_clients.forEach(client => {
+        allNodes.push({...client, group: 'client'});
+    });
+
+    // Add frontends
+    networkData.frontends.forEach(frontend => {
+        allNodes.push({...frontend, group: 'frontend'});
+    });
+
+    // Add backends
+    networkData.backends.forEach(backend => {
+        allNodes.push({...backend, group: 'backend'});
+        
+        // Add individual servers as nodes
+        backend.servers.forEach(server => {
+            allNodes.push({
+                id: `server_${backend.name}_${server.name}`,
+                type: 'server',
+                name: `${server.name} (${server.ip}:${server.port})`,
+                group: 'server',
+                status: server.status,
+                ip: server.ip,
+                port: server.port,
+                ssl: server.ssl,
+                backend: backend.name
+            });
+        });
+    });
+
+    // Add connections as links
+    networkData.connections.forEach(conn => {
+        allLinks.push({
+            source: conn.source,
+            target: conn.target,
+            type: conn.type,
+            protocol: conn.protocol,
+            port: conn.port,
+            condition: conn.condition
+        });
+    });
+
+    // Clear previous visualization
+    g.selectAll('*').remove();
+
+    // Create links
+    const link = g.append('g')
+        .attr('class', 'links')
+        .selectAll('line')
+        .data(allLinks)
+        .enter().append('line')
+        .attr('class', d => `link ${d.type}`)
+        .attr('marker-end', d => `url(#arrow-${d.type})`)
+        .style('stroke', d => getConnectionColor(d))
+        .style('stroke-width', d => getConnectionWidth(d));
+
+    // Create nodes
+    const node = g.append('g')
+        .attr('class', 'nodes')
+        .selectAll('circle')
+        .data(allNodes)
+        .enter().append('circle')
+        .attr('r', d => getNodeSize(d))
+        .attr('class', d => `node ${d.group}`)
+        .style('fill', d => getNodeColor(d))
+        .call(d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended))
+        .on('click', showNodeDetails)
+        .on('mouseover', highlightConnections)
+        .on('mouseout', unhighlightConnections);
+
+    // Add labels
+    const label = g.append('g')
+        .attr('class', 'labels')
+        .selectAll('text')
+        .data(allNodes)
+        .enter().append('text')
+        .attr('class', 'node-label')
+        .attr('dy', -20)
+        .attr('text-anchor', 'middle')
+        .text(d => d.name);
+
+    // Update simulation
+    simulation.nodes(allNodes);
+    simulation.force('link').links(allLinks);
+
+    simulation.on('tick', () => {
+        link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+
+        node
+            .attr('cx', d => d.x)
+            .attr('cy', d => d.y);
+
+        label
+            .attr('x', d => d.x)
+            .attr('y', d => d.y);
+    });
+
+    nodes = node;
+    links = link;
+}
+
+function getNodeColor(d) {
+    switch(d.group) {
+        case 'client': return '#4299e1'; // Blue
+        case 'haproxy': 
+            return d.status === 'running' ? '#48bb78' : '#f56565'; // Green/Red
+        case 'frontend': return '#ed8936'; // Orange
+        case 'backend': return '#9f7aea'; // Purple
+        case 'server':
+            switch(d.status) {
+                case 'healthy': return '#48bb78'; // Green
+                case 'unreachable': return '#f56565'; // Red
+                default: return '#ecc94b'; // Yellow
+            }
+        default: return '#a0aec0'; // Gray
+    }
+}
+
+function getNodeSize(d) {
+    switch(d.group) {
+        case 'haproxy': return 25;
+        case 'frontend': return 20;
+        case 'backend': return 18;
+        case 'server': return 15;
+        case 'client': return 16;
+        default: return 12;
+    }
+}
+
+function getConnectionColor(d) {
+    switch(d.protocol) {
+        case 'HTTP': return '#4299e1'; // Blue
+        case 'HTTPS': return '#48bb78'; // Green
+        case 'TCP': return '#ed8936'; // Orange
+        default: return '#a0aec0'; // Gray
+    }
+}
+
+function getConnectionWidth(d) {
+    switch(d.type) {
+        case 'incoming': return 3;
+        case 'routing': return 2;
+        case 'default_routing': return 2;
+        case 'backend_server': return 1.5;
+        default: return 1;
+    }
+}
+
+function showNodeDetails(event, d) {
+    const modal = new bootstrap.Modal(document.getElementById('nodeModal'));
+    const modalBody = document.getElementById('nodeModalBody');
+    
+    let content = `
+        <div class="mb-3">
+            <strong>Type:</strong> ${d.type}<br>
+            <strong>Name:</strong> ${d.name}<br>
+    `;
+
+    if (d.status) {
+        content += `<strong>Status:</strong> <span class="badge bg-${getStatusBadge(d.status)}">${d.status}</span><br>`;
+    }
+
+    if (d.ip) {
+        content += `<strong>IP Address:</strong> ${d.ip}<br>`;
+    }
+
+    if (d.port) {
+        content += `<strong>Port:</strong> ${d.port}<br>`;
+    }
+
+    if (d.protocol) {
+        content += `<strong>Protocol:</strong> ${d.protocol}<br>`;
+    }
+
+    if (d.filename) {
+        content += `<strong>Config File:</strong> ${d.filename}<br>`;
+    }
+
+    if (d.binds && d.binds.length > 0) {
+        content += `<strong>Bind Addresses:</strong><br>`;
+        d.binds.forEach(bind => {
+            content += `&nbsp;&nbsp;• ${bind.ip}:${bind.port} (${bind.protocol})<br>`;
+        });
+    }
+
+    if (d.servers && d.servers.length > 0) {
+        content += `<strong>Servers:</strong><br>`;
+        d.servers.forEach(server => {
+            content += `&nbsp;&nbsp;• ${server.name}: ${server.ip}:${server.port} (${server.status})<br>`;
+        });
+    }
+
+    content += `</div>`;
+    
+    modalBody.innerHTML = content;
+    document.getElementById('nodeModalLabel').textContent = `${d.type} - ${d.name}`;
+    modal.show();
+}
+
+function getStatusBadge(status) {
+    switch(status) {
+        case 'running':
+        case 'healthy': return 'success';
+        case 'stopped':
+        case 'unreachable': return 'danger';
+        default: return 'warning';
+    }
+}
+
+function highlightConnections(event, d) {
+    links.style('opacity', l => 
+        (l.source.id === d.id || l.target.id === d.id) ? 1.0 : 0.2
+    );
+    nodes.style('opacity', n => 
+        (n.id === d.id || isConnected(d, n)) ? 1.0 : 0.3
+    );
+}
+
+function unhighlightConnections() {
+    links.style('opacity', 1.0);
+    nodes.style('opacity', 1.0);
+}
+
+function isConnected(a, b) {
+    return networkData.connections.some(conn => 
+        (conn.source === a.id && conn.target === b.id) ||
+        (conn.source === b.id && conn.target === a.id)
+    );
+}
+
+function handleZoom(event) {
+    g.attr('transform', event.transform);
+}
+
+function resetZoom() {
+    svg.transition().duration(750).call(
+        d3.zoom().transform,
+        d3.zoomIdentity
+    );
+}
+
+function refreshMap() {
+    document.querySelector('.loading-overlay').style.display = 'flex';
+    loadNetworkData();
+}
+
+function toggleFilters() {
+    const panel = document.getElementById('filtersPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyFilters() {
+    // Filter implementation would go here
+    console.log('Applying filters...');
+}
+
+function clearFilters() {
+    document.querySelectorAll('#filtersPanel input[type="checkbox"]').forEach(cb => {
+        cb.checked = true;
+    });
+}
+
+// Drag functions
+function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+}
+
+function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+}
+
+function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+}
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    const container = document.getElementById('networkMap');
+    const width = container.clientWidth;
+    const height = 600;
+    
+    svg.attr('width', width).attr('height', height);
+    simulation.force('center', d3.forceCenter(width / 2, height / 2));
+    simulation.alpha(0.3).restart();
+});
+</script>
+
+<style>
+.network-map-container {
+    position: relative;
+    min-height: 600px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(5px);
+    z-index: 10;
+}
+
+/* D3.js Network Styles */
+.node {
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 2px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.node:hover {
+    stroke-width: 3px;
+    filter: brightness(1.2);
+}
+
+.link {
+    stroke-opacity: 0.6;
+    transition: all 0.3s ease;
+}
+
+.link:hover {
+    stroke-opacity: 1.0;
+    stroke-width: 4px !important;
+}
+
+.node-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    fill: #1a365d;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.arrow {
+    fill: #1a365d;
+}
+
+/* Legend Styles */
+.legend-node {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.client-node { background-color: #4299e1; }
+.haproxy-node { background-color: #48bb78; }
+.frontend-node { background-color: #ed8936; }
+.backend-node { background-color: #9f7aea; }
+
+.legend-line {
+    width: 24px;
+    height: 3px;
+    display: inline-block;
+}
+
+.http-line { background-color: #4299e1; }
+.https-line { background-color: #48bb78; }
+.tcp-line { background-color: #ed8936; }
+.routing-line { background-color: #9f7aea; }
+</style>
+{% endblock %}

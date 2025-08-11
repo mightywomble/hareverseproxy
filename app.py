@@ -5,6 +5,8 @@ import os
 import subprocess
 import logging
 import re # Import regex for easier text manipulation
+import ipaddress
+import socket
 
 # Get the directory of the current script (app.py)
 # This ensures that Flask finds the templates and static folders relative to app.py's location,
@@ -161,6 +163,336 @@ frontend https_frontend
     except Exception as e:
         logging.error(f"Error updating 00-frontend.cfg: {e}")
         return False, f"Error updating 00-frontend.cfg: {str(e)}"
+
+# --- HAProxy Configuration Parser for Network Map ---
+
+def parse_haproxy_configs():
+    """Parse HAProxy configuration files to extract network topology data."""
+    topology = {
+        'haproxy_server': {
+            'id': 'haproxy_hub',
+            'type': 'haproxy',
+            'name': 'HAProxy Server',
+            'status': get_haproxy_status()
+        },
+        'frontends': [],
+        'backends': [],
+        'connections': [],
+        'external_clients': []
+    }
+    
+    try:
+        # Parse main haproxy.cfg
+        if os.path.exists(HAPROXY_CFG_PATH):
+            with open(HAPROXY_CFG_PATH, 'r') as f:
+                main_config = f.read()
+                parse_config_content(main_config, topology, 'haproxy.cfg')
+        
+        # Parse config.d files
+        config_files = get_config_files()
+        for filename in config_files:
+            success, content = get_config_file_content(filename)
+            if success:
+                parse_config_content(content, topology, filename)
+                
+        # Add external client nodes
+        add_external_clients(topology)
+        
+        # Generate connections between components
+        generate_connections(topology)
+        
+        return topology
+        
+    except Exception as e:
+        logging.error(f"Error parsing HAProxy configs: {e}")
+        return {
+            'error': f"Error parsing configurations: {str(e)}",
+            'haproxy_server': topology['haproxy_server'],
+            'frontends': [],
+            'backends': [],
+            'connections': [],
+            'external_clients': []
+        }
+
+def parse_config_content(content, topology, filename):
+    """Parse individual config file content."""
+    lines = content.split('\n')
+    current_section = None
+    current_config = {}
+    
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+            
+        # Frontend section
+        if line.startswith('frontend '):
+            if current_section and current_config:
+                finalize_section(current_section, current_config, topology, filename)
+            current_section = 'frontend'
+            current_config = {
+                'name': line.split()[1],
+                'binds': [],
+                'acls': [],
+                'use_backends': [],
+                'default_backend': None,
+                'filename': filename
+            }
+            
+        # Backend section
+        elif line.startswith('backend '):
+            if current_section and current_config:
+                finalize_section(current_section, current_config, topology, filename)
+            current_section = 'backend'
+            current_config = {
+                'name': line.split()[1],
+                'servers': [],
+                'mode': 'http',
+                'balance': 'roundrobin',
+                'filename': filename
+            }
+            
+        # Parse frontend/backend directives
+        elif current_section:
+            if line.startswith('bind '):
+                bind_info = parse_bind_directive(line)
+                if bind_info:
+                    current_config['binds'].append(bind_info)
+                    
+            elif line.startswith('acl '):
+                acl_info = parse_acl_directive(line)
+                if acl_info:
+                    current_config['acls'].append(acl_info)
+                    
+            elif line.startswith('use_backend '):
+                backend_info = parse_use_backend_directive(line)
+                if backend_info:
+                    current_config['use_backends'].append(backend_info)
+                    
+            elif line.startswith('default_backend '):
+                current_config['default_backend'] = line.split()[1]
+                
+            elif line.startswith('server '):
+                server_info = parse_server_directive(line)
+                if server_info:
+                    current_config['servers'].append(server_info)
+                    
+            elif line.startswith('mode '):
+                current_config['mode'] = line.split()[1]
+                
+            elif line.startswith('balance '):
+                current_config['balance'] = line.split()[1]
+    
+    # Don't forget the last section
+    if current_section and current_config:
+        finalize_section(current_section, current_config, topology, filename)
+
+def parse_bind_directive(line):
+    """Parse bind directive to extract IP and port."""
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+        
+    bind_addr = parts[1]
+    ssl_enabled = 'ssl' in line
+    
+    # Parse address:port
+    if ':' in bind_addr:
+        if bind_addr.startswith('*:'):
+            ip = '0.0.0.0'
+            port = bind_addr.split(':')[1]
+        else:
+            ip, port = bind_addr.split(':', 1)
+    else:
+        ip = bind_addr
+        port = '80' if not ssl_enabled else '443'
+    
+    return {
+        'ip': ip,
+        'port': int(port),
+        'ssl': ssl_enabled,
+        'protocol': 'HTTPS' if ssl_enabled else 'HTTP'
+    }
+
+def parse_acl_directive(line):
+    """Parse ACL directive."""
+    parts = line.split()
+    if len(parts) < 4:
+        return None
+    
+    return {
+        'name': parts[1],
+        'matcher': ' '.join(parts[2:]),
+        'type': 'hostname' if 'hdr(host)' in line else 'other'
+    }
+
+def parse_use_backend_directive(line):
+    """Parse use_backend directive."""
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+    
+    backend_name = parts[1]
+    condition = ' '.join(parts[3:]) if len(parts) > 3 else None
+    
+    return {
+        'backend': backend_name,
+        'condition': condition
+    }
+
+def parse_server_directive(line):
+    """Parse server directive to extract backend server info."""
+    parts = line.split()
+    if len(parts) < 3:
+        return None
+    
+    server_name = parts[1]
+    server_addr = parts[2]
+    
+    # Parse IP:port
+    if ':' in server_addr:
+        ip, port = server_addr.split(':', 1)
+    else:
+        ip = server_addr
+        port = '80'
+    
+    # Check for SSL
+    ssl_enabled = 'ssl' in line
+    
+    # Check for health checks
+    health_check = 'check' in line
+    
+    return {
+        'name': server_name,
+        'ip': ip,
+        'port': int(port),
+        'ssl': ssl_enabled,
+        'health_check': health_check,
+        'status': check_server_status(ip, int(port))
+    }
+
+def check_server_status(ip, port):
+    """Check if a server is reachable."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex((ip, port))
+        sock.close()
+        return 'healthy' if result == 0 else 'unreachable'
+    except:
+        return 'unknown'
+
+def finalize_section(section_type, config, topology, filename):
+    """Add completed section to topology."""
+    if section_type == 'frontend':
+        # Generate unique ID
+        config['id'] = f"frontend_{config['name']}"
+        config['type'] = 'frontend'
+        topology['frontends'].append(config)
+        
+    elif section_type == 'backend':
+        # Generate unique ID
+        config['id'] = f"backend_{config['name']}"
+        config['type'] = 'backend'
+        topology['backends'].append(config)
+
+def add_external_clients(topology):
+    """Add external client nodes based on frontend configurations."""
+    client_types = set()
+    
+    for frontend in topology['frontends']:
+        for bind in frontend['binds']:
+            if bind['port'] == 80:
+                client_types.add('http_clients')
+            elif bind['port'] == 443:
+                client_types.add('https_clients')
+            else:
+                client_types.add(f'port_{bind["port"]}_clients')
+    
+    for client_type in client_types:
+        if client_type == 'http_clients':
+            name = 'HTTP Clients'
+            port = 80
+            protocol = 'HTTP'
+        elif client_type == 'https_clients':
+            name = 'HTTPS Clients'
+            port = 443
+            protocol = 'HTTPS'
+        else:
+            port_num = client_type.split('_')[1]
+            name = f'Port {port_num} Clients'
+            port = int(port_num)
+            protocol = 'TCP'
+        
+        topology['external_clients'].append({
+            'id': client_type,
+            'type': 'external_client',
+            'name': name,
+            'port': port,
+            'protocol': protocol
+        })
+
+def generate_connections(topology):
+    """Generate connections between nodes."""
+    connections = []
+    
+    # Connections from external clients to frontends
+    for client in topology['external_clients']:
+        for frontend in topology['frontends']:
+            for bind in frontend['binds']:
+                if bind['port'] == client['port']:
+                    connections.append({
+                        'id': f"conn_{client['id']}_to_{frontend['id']}",
+                        'source': client['id'],
+                        'target': frontend['id'],
+                        'type': 'incoming',
+                        'protocol': client['protocol'],
+                        'port': client['port']
+                    })
+    
+    # Connections from frontends to backends
+    for frontend in topology['frontends']:
+        # Direct use_backend connections
+        for use_backend in frontend['use_backends']:
+            backend_name = use_backend['backend']
+            backend = next((b for b in topology['backends'] if b['name'] == backend_name), None)
+            if backend:
+                connections.append({
+                    'id': f"conn_{frontend['id']}_to_{backend['id']}",
+                    'source': frontend['id'],
+                    'target': backend['id'],
+                    'type': 'routing',
+                    'condition': use_backend.get('condition'),
+                    'protocol': 'HTTP/HTTPS'
+                })
+        
+        # Default backend connection
+        if frontend['default_backend']:
+            backend = next((b for b in topology['backends'] if b['name'] == frontend['default_backend']), None)
+            if backend:
+                connections.append({
+                    'id': f"conn_{frontend['id']}_to_{backend['id']}_default",
+                    'source': frontend['id'],
+                    'target': backend['id'],
+                    'type': 'default_routing',
+                    'protocol': 'HTTP/HTTPS'
+                })
+    
+    # Connections from backends to servers
+    for backend in topology['backends']:
+        for server in backend['servers']:
+            server_id = f"server_{backend['name']}_{server['name']}"
+            connections.append({
+                'id': f"conn_{backend['id']}_to_{server_id}",
+                'source': backend['id'],
+                'target': server_id,
+                'type': 'backend_server',
+                'protocol': 'HTTPS' if server['ssl'] else 'HTTP',
+                'port': server['port'],
+                'server_status': server['status']
+            })
+    
+    topology['connections'] = connections
 
 # --- Routes ---
 
@@ -328,6 +660,27 @@ def api_config_d_content(filename):
     else:
         return jsonify(success=False, message=content), 404 # Use 404 if file not found
 
+
+@app.route('/map')
+def network_map():
+    """Display the network topology map."""
+    return render_template('network_map.html')
+
+@app.route('/api/network_topology')
+def api_network_topology():
+    """API endpoint to get network topology data."""
+    topology = parse_haproxy_configs()
+    return jsonify(topology)
+
+@app.route('/api/server_status/<server_ip>/<int:server_port>')
+def api_server_status(server_ip, server_port):
+    """Check individual server status."""
+    status = check_server_status(server_ip, server_port)
+    return jsonify({
+        'ip': server_ip,
+        'port': server_port,
+        'status': status
+    })
 
 @app.route('/haproxy_cfg', methods=['GET', 'POST'])
 def haproxy_cfg():
